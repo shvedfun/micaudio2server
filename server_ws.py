@@ -35,11 +35,13 @@ class AWServer:
         'wav': {'subtype': 'PCM_16', 'endian': 'LITTLE', 'format': 'WAV'},
         'mp3': {'format': 'MP3'}
     }
+    audio_folder_name = '/audio'
 
     def __init__(
             self, url: str = None, port: int = 7654, dtype: str = 'int16',
             channels: int = 1, samplerate: int = 8000, format: str='mp3', durations=100
     ):
+        self._create_folder()
         self.adress: str = url
         self.channels: int = channels
         self.dtype: str = dtype
@@ -50,6 +52,13 @@ class AWServer:
         self.buffer = bytes()
         self.len_frame = self._get_len_frame()
         self.format = format
+
+    def _create_folder(self):
+        cwd = os.getcwd()
+        full_path = cwd + self.audio_folder_name
+        logger.debug(f'full_path = {full_path}')
+        if not os.path.isdir(full_path):
+            os.mkdir(full_path)
 
     def __del__(self):
         if self.file:
@@ -95,7 +104,7 @@ class AWServer:
             tst = datetime.datetime.utcnow().timestamp()
         tst = int(tst)
         file = sf.SoundFile(
-            f'tmp/audio_{str(tst)}.' + self.format, mode='w', channels=self.channels,
+            f'audio/audio_{str(tst)}.' + self.format, mode='w', channels=self.channels,
             samplerate=self.samplerate, **self.format2file_params[self.format] #, subtype='PCM_16', endian='LITTLE', format='RAW'
         )
         self.file = file
@@ -133,13 +142,7 @@ def init_args(params):
 
 
 if __name__ == '__main__':
-
-
-    params = {
-        'samplerate': 8000,
-        'dtype': 'int16',
-        'channels': 1,
-    }
+    params = DeviceConfig().dict()
     params = init_env(params)
     params = init_args(params)
     logger.info(f'params = {params}')

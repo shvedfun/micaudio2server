@@ -22,52 +22,19 @@ handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-# async def mic_stream_generator(channels=1, **kwargs):
-#     stream = None
-#     q_in = asyncio.Queue()
-#     loop = asyncio.get_event_loop()
-#
-#     def callback(in_data, frame_count, time_info, status):
-#         if len(in_data) > 0:
-#             loop.call_soon_threadsafe(q_in.put_nowait, (in_data, status))
-#
-#     def finished_callback():
-#         global stream
-#         logger.info(f'!!!Microphone is disconnected!!')
-#         while True:
-#             try:
-#                 stream = sd.RawInputStream(
-#                     callback=callback, channels=channels,
-#                     finished_callback=finished_callback, **kwargs
-#                 )
-#             except Exception as e:
-#                 logger.critical(f'Error {e}')
-#                 time.sleep(10)
-#
-#     try:
-#         stream = sd.RawInputStream(
-#                 callback=callback, channels=channels,
-#                 finished_callback=finished_callback, **kwargs
-#         )
-#         with stream:
-#             while True:
-#                 indata, status = await q_in.get()
-#                 yield indata, status
-#     except Exception as e:
-#         logger.critical(f'Error = {e}')
 
 class Microphone:
 
     def __init__(self, mic_config: DeviceConfig, url='ws://localhost', port=7654):
-        self.device = get_microphonedevices(kind='input')
+        self.device = get_microphonedevices()
         self.mic: DeviceConfig = mic_config # TODO kind='input'
         self.server_url = url + ':' + str(port)
         self.max_file_size = 0
         self.buffer: bytes = bytes([])
         self.len_chunk = 4000 * 2
-        self.stream = None
+        self.stream: sd.RawInputStream = None
 
-    async def run_microfone(self):
+    async def run_microphone(self):
         async for indata, frame_count, time_info, status in self.mic_stream_generator(
                 channels=self.mic.channels, device=self.device['index'],
                 samplerate=self.mic.samplerate, dtype=self.mic.dtype
@@ -83,44 +50,36 @@ class Microphone:
                 loop.call_soon_threadsafe(q_in.put_nowait, (in_data, frame_count, time_info, status))
 
         def finished_callback():
-            logger.warning(f'!!!Microphone is disconnected!!!')
+            logger.warning(f'Что-то пошло не так. Проверьте подключение микрофона. Остановите и перезапустите программу')
 
-        try:
-            self.stream = sd.RawInputStream(
-                callback=callback, channels=channels,
-                finished_callback=finished_callback, **kwargs
-            )
-            with self.stream:
-                while True:
-                    indata, frame_count, time_info, status = await q_in.get()
-                    yield indata, frame_count, time_info, status
-        except Exception as e:
-            logger.critical(f' {e}')
-            raise e
+        self.stream = sd.RawInputStream(
+            callback=callback, channels=channels,
+            finished_callback=finished_callback, **kwargs
+        )
+        with self.stream:
+            while True:
+                indata, frame_count, time_info, status = await q_in.get()
+                yield indata, frame_count, time_info, status
 
     async def send2ws(self):
         while True:
-            try:
-                i = 0
-                async with websockets.connect(self.server_url) as ws:
-                    async for indata, frame_count, time_info, status in self.mic_stream_generator(
-                            channels=self.mic.channels, device=self.device['index'],
-                            samplerate=self.mic.samplerate, dtype=self.mic.dtype
-                    ):
-                        indata = bytes(indata)
-                        self.buffer += indata
-                        if len(self.buffer) >= self.len_chunk:
-                            tst = datetime.datetime.utcnow().timestamp()
-                            btst = struct.pack('d', tst)
-                            indata = bytes(btst) + self.buffer[:self.len_chunk]
-                            if i % 20 == 0:
-                                logger.info(f'status = {status} frame_count {frame_count} ')
-                            await ws.send(indata)
-                            self.buffer = self.buffer[self.len_chunk:]
-                            i += 1
-            except Exception as e:
-                logger.critical(f' {e}')
-                await asyncio.sleep(1)
+            i = 0
+            async with websockets.connect(self.server_url) as ws:
+                async for indata, frame_count, time_info, status in self.mic_stream_generator(
+                        channels=self.mic.channels, device=self.device['index'],
+                        samplerate=self.mic.samplerate, dtype=self.mic.dtype
+                ):
+                    indata = bytes(indata)
+                    self.buffer += indata
+                    if len(self.buffer) >= self.len_chunk:
+                        tst = datetime.datetime.utcnow().timestamp()
+                        btst = struct.pack('d', tst)
+                        indata = bytes(btst) + self.buffer[:self.len_chunk]
+                        if i % 20 == 0:
+                            logger.info(f'status = {status} frame_count {frame_count} ')
+                        await ws.send(indata)
+                        self.buffer = self.buffer[self.len_chunk:]
+                        i += 1
 
 
 async def main():
@@ -142,11 +101,13 @@ async def main():
         server_params['url'] = args.url
     if args.port:
         server_params['port'] = args.port
-    try:
-        mic = Microphone(mic_config=mic_config, **server_params)
-        await mic.send2ws()
-    except Exception as e:
-        logger.critical(f' {e}')
+    while True:
+        try:
+            mic = Microphone(mic_config=mic_config, **server_params)
+            await mic.send2ws()
+        except Exception as e:
+            logger.critical(f' {e}')
+            await asyncio.sleep(10)
 
 
 if __name__ == '__main__':

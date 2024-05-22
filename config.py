@@ -2,9 +2,13 @@ from pydantic import BaseModel
 import sounddevice as sd
 
 
-def get_microphonedevices(device=None, kind=None):
+def get_microphonedevices(device=None, kind='input'):
     devices = sd.query_devices(device=device, kind=kind)
-    return devices
+    if type(devices) is dict:
+        return devices
+    if len(devices) > 0:
+        return devices[0]
+    raise IOError
 
 
 class DeviceConfig(BaseModel):
