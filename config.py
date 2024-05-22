@@ -7,11 +7,9 @@ def get_microphonedevices(device=None, kind=None):
     return devices
 
 
-class DeviceStream(BaseModel):
-    device: dict
+class DeviceConfig(BaseModel):
     samplerate: int = 8000
     channels: int = 1
     dtype: str = 'int16'
 
-
-mic_config = DeviceStream(device=get_microphonedevices(kind='input'))
+log_format = '%(asctime)s - %(module)s/%(funcName)s - %(levelname)s - %(message)s'
