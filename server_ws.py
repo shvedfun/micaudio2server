@@ -80,6 +80,7 @@ class AWServer:
                 logger.critical(f'Error = {e}')
                 if self.file:
                     self.file.close()
+                await asyncio.sleep(2)
 
     async def callback2file(self, websocket):
         async for data in websocket:

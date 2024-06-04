@@ -25,14 +25,16 @@ logger.addHandler(handler)
 
 class Microphone:
 
-    def __init__(self, mic_config: DeviceConfig, url='ws://localhost', port=7654):
+    def __init__(self, mic_config: DeviceConfig, url='ws://localhost', port=7654, latency=2.0):
         self.device = get_microphonedevices()
+        logger.info(f'device = {self.device}')
         self.mic: DeviceConfig = mic_config # TODO kind='input'
         self.server_url = url + ':' + str(port)
         self.max_file_size = 0
         self.buffer: bytes = bytes([])
         self.len_chunk = 4000 * 2
         self.stream: sd.RawInputStream = None
+        self.latency = latency
 
     async def run_microphone(self):
         async for indata, frame_count, time_info, status in self.mic_stream_generator(
@@ -53,7 +55,7 @@ class Microphone:
             logger.warning(f'Что-то пошло не так. Проверьте подключение микрофона. Остановите и перезапустите программу')
 
         self.stream = sd.RawInputStream(
-            callback=callback, channels=channels,
+            callback=callback, channels=channels, latency=2.0,
             finished_callback=finished_callback, **kwargs
         )
         with self.stream:
@@ -89,6 +91,7 @@ async def main():
     parser.add_argument('--channels', type=int, help='audio channels', required=False)
     parser.add_argument('--url', type=str, help='server url', required=False)
     parser.add_argument('--port', type=int, help='server port', required=False)
+    parser.add_argument('--latency', type=float, help='latency micro stream', required=False)
     args = parser.parse_args()
     if args.samplerate:
         mic_config.samplerate = args.samplerate
@@ -96,14 +99,16 @@ async def main():
     if args.channels:
         mic_config.channels = args.channels
     logger.info(f'mic_config = {mic_config}')
-    server_params = {}
+    params = {}
     if args.url:
-        server_params['url'] = args.url
+        params['url'] = args.url
     if args.port:
-        server_params['port'] = args.port
+        params['port'] = args.port
+    if args.latency:
+        params['latency'] = args.latency
     while True:
         try:
-            mic = Microphone(mic_config=mic_config, **server_params)
+            mic = Microphone(mic_config=mic_config, **params)
             await mic.send2ws()
         except Exception as e:
             logger.critical(f' {e}')

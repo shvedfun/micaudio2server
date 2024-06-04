@@ -16,4 +16,5 @@ class DeviceConfig(BaseModel):
     channels: int = 1
     dtype: str = 'int16'
 
+
 log_format = '%(asctime)s - %(module)s/%(funcName)s - %(levelname)s - %(message)s'
