@@ -39,7 +39,7 @@ class AWServer:
 
     def __init__(
             self, url: str = None, port: int = 7654, dtype: str = 'int16',
-            channels: int = 1, samplerate: int = 8000, format: str='mp3', durations=100
+            channels: int = 1, samplerate: int = 8000, format: str='mp3', duration=100
     ):
         self._create_folder()
         self.adress: str = url
@@ -48,7 +48,7 @@ class AWServer:
         self.file: sf.SoundFile = None
         self.port: int = port
         self.samplerate: int = int(samplerate)
-        self.max_frames = self.samplerate * int(durations)
+        self.max_frames = self.samplerate * int(duration)
         self.buffer = bytes()
         self.len_frame = self._get_len_frame()
         self.format = format

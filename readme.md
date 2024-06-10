@@ -16,4 +16,5 @@ help
 - docker pull cr.yandex/crp23u17la71rbk47bcs/server_ws:0.20
 
 - yc container registry configure-docker
-- 
+
+docker container create -p 7654:7654 --name horeca-test-audio-44100 -e SAMPLERATE=44100 -v /home/victor/horeca/audio:/usr/src/app/audio cr.yandex/crp23u17la71rbk47bcs/server_ws:0.20
