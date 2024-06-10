@@ -5,22 +5,17 @@ from argparse import ArgumentParser
 import asyncio
 import datetime
 import struct
+from typing import Callable
 
 from websockets.server import serve as ws_server
 import soundfile as sf
 
-from config import DeviceConfig, log_format
+from config import DeviceConfig
+from utils import get_logger
+
 
 log_level = logging.DEBUG
-logger = logging.getLogger(__name__)
-logger.setLevel(log_level)
-formatter = logging.Formatter(
-    fmt=log_format,
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+logger = get_logger(log_level)
 
 
 class AWServer:
@@ -49,7 +44,7 @@ class AWServer:
         self.port: int = port
         self.samplerate: int = int(samplerate)
         self.max_frames = self.samplerate * int(duration)
-        self.buffer = bytes()
+        self.buffer = bytearray()
         self.len_frame = self._get_len_frame()
         self.format = format
 
@@ -68,12 +63,12 @@ class AWServer:
         assert self.dtype in self.conv_dtype2len.keys()
         return self.conv_dtype2len[self.dtype]
 
-    async def run_server(self, callback=None) -> None:
+    async def run_server(self, callback: Callable = None) -> None:
         callback = callback or self.callback2file
         while True:
             try:
                 async with ws_server(
-                        ws_handler=callback, port=self.port #, host=self.adress
+                        ws_handler=callback, port=self.port
                 ):
                     await asyncio.Future()
             except Exception as e:
@@ -84,32 +79,34 @@ class AWServer:
 
     async def callback2file(self, websocket):
         async for data in websocket:
+            # вычисляю таймстемп блока данных
             btst = data[:8]
             tst = struct.unpack('d', btst)[0]
-            data = data[8:]
-            end_tst = tst + float((len(data)//self.len_frame)/self.samplerate)
-            self.buffer += data
+            self.buffer += data[8:]
+            # Если  длина буфера достаточна, то скидываю в файл
             while (len(self.buffer) // self.len_frame) > self.max_frames:
                 data = self.buffer[:self.max_frames * self.len_frame]
-                start_tst = end_tst - float(len(self.buffer)//self.len_frame/self.len_frame)
-                file = self._get_file(start_tst)
-                logger.debug(f'write file = {file.name}')
-                self.file.buffer_write(data, dtype=self.dtype)
-                self.file.close()
+                file = self._save2file(data, tst)
                 self.buffer = self.buffer[self.max_frames * self.len_frame:]
 
-    def _get_file(self, tst: float=None):
+    def _save2file(self, data: bytearray, tst: float) -> None:
+        """
+        Записывает в файл буфер. В суффиксе имени файла указан таймстемп
+        :data - буфер данных
+        :param tst: таймстемп данных
+        :return: None
+        """
         if self.file and not self.file.closed:
-            return self.file
-        if tst is None:
-            tst = datetime.datetime.utcnow().timestamp()
+            self.file.close()
         tst = int(tst)
         file = sf.SoundFile(
             f'audio/audio_{str(tst)}.' + self.format, mode='w', channels=self.channels,
-            samplerate=self.samplerate, **self.format2file_params[self.format] #, subtype='PCM_16', endian='LITTLE', format='RAW'
+            samplerate=self.samplerate, **self.format2file_params[self.format]
         )
         self.file = file
-        return self.file
+        self.file.buffer_write(data, dtype=self.dtype)
+        self.file.close()
+        logger.debug(f'write file = {file.name}')
 
 
 def init_env(params):
